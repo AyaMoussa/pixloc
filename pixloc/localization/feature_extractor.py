@@ -28,20 +28,11 @@ class FeatureExtractor(torch.nn.Module):
         return numpy_image_to_torch(image).to(self.device).unsqueeze(0)
 
     @torch.no_grad()
-    def __call__(self, image: np.array, scale_image: int = 1):
+    def __call__(self, image_tensor):
         """Extract feature-maps for a given image.
         Args:
             image: input image (H, W, C)
         """
-        image = image.astype(np.float32)  # better for resizing
-        scale_resize = (1., 1.)
-        if self.conf.resize is not None:
-            target_size = self.conf.resize // scale_image
-            if (max(image.shape[:2]) > target_size or
-                    self.conf.resize_by == 'max_force'):
-                image, scale_resize = resize(image, target_size, max, 'linear')
-
-        image_tensor = self.prepare_input(image)
         pred = self.model({'image': image_tensor})
         features = pred['feature_maps']
         assert len(self.model.scales) == len(features)
@@ -51,7 +42,21 @@ class FeatureExtractor(torch.nn.Module):
         if confidences is not None:
             confidences = [c.squeeze(0) for c in confidences]
 
+
+        return features, confidences
+
+    def resize(self, image, scale_image: int = 1):
+        image = image.astype(np.float32)  # better for resizing
+        scale_resize = (1., 1.)
+        if self.conf.resize is not None:
+            target_size = self.conf.resize // scale_image
+            if (max(image.shape[:2]) > target_size or
+                    self.conf.resize_by == 'max_force'):
+                image, scale_resize = resize(image, target_size, max, 'linear')
+
+        image_tensor = self.prepare_input(image)
+        
         scales = [(scale_resize[0]/s, scale_resize[1]/s)
                   for s in self.model.scales]
+        return image_tensor, scales
 
-        return features, scales, confidences
